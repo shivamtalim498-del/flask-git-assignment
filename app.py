@@ -1,5 +1,4 @@
-
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+﻿from flask import Flask, render_template, request, redirect, url_for, jsonify
 from pymongo import MongoClient
 from dotenv import load_dotenv
 from pathlib import Path
@@ -19,11 +18,12 @@ DATA_FILE = BASE_DIR / "data.json"
 # Logging
 logging.basicConfig(level=logging.INFO)
 
-# MongoDB Atlas Connection
+# MongoDB connection
 MONGO_URI = os.getenv("MONGO_URI")
 
 client = None
 collection = None
+todo_collection = None
 
 if MONGO_URI:
     try:
@@ -33,7 +33,12 @@ if MONGO_URI:
         )
 
         db = client["studentdb"]
+
+        # Existing student collection
         collection = db["students"]
+
+        # New To-Do collection
+        todo_collection = db["todo_items"]
 
     except Exception:
         logging.exception("MongoDB configuration error")
@@ -77,19 +82,16 @@ def home():
             if collection is None:
                 raise RuntimeError("MongoDB is not configured.")
 
-            # Insert form data into MongoDB
             collection.insert_one({
                 "name": name,
                 "email": email
             })
 
-            # Redirect after successful submission
             return redirect(url_for("success"))
 
         except Exception:
             logging.exception("Data submission failed")
 
-            # Display error on the same page
             return render_template(
                 "index.html",
                 error="Data submission failed. Please check your MongoDB connection and try again.",
@@ -104,6 +106,43 @@ def home():
 @app.route("/success")
 def success():
     return render_template("success.html")
+
+
+# ---------------- To-Do Backend Route ----------------
+@app.route("/submittodoitem", methods=["POST"])
+def submit_todo_item():
+
+    item_name = request.form.get("itemName", "").strip()
+    item_description = request.form.get("itemDescription", "").strip()
+
+    if not item_name or not item_description:
+        return jsonify({
+            "error": "Item Name and Item Description are required."
+        }), 400
+
+    if todo_collection is None:
+        return jsonify({
+            "error": "MongoDB is not configured."
+        }), 500
+
+    try:
+        todo_collection.insert_one({
+            "itemName": item_name,
+            "itemDescription": item_description
+        })
+
+        return jsonify({
+            "message": "To-Do item submitted successfully!",
+            "itemName": item_name,
+            "itemDescription": item_description
+        }), 201
+
+    except Exception:
+        logging.exception("To-Do submission failed")
+
+        return jsonify({
+            "error": "Unable to save To-Do item."
+        }), 500
 
 
 # ---------------- Run Flask Application ----------------
